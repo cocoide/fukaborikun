@@ -5,7 +5,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/go-redis/redis"
+	"github.com/redis/go-redis/v9"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 )
@@ -15,7 +15,7 @@ func NewDatabse() *gorm.DB {
 	var DSN string
 	switch env {
 	case "pro":
-		DSN = os.Getenv("MYSQL_URL")
+		DSN = os.Getenv("DSN")
 	case "dev":
 		DSN = "kazuki:secret@tcp(db:3306)/mydb?charset=utf8mb4&parseTime=True&loc=Asia%2FTokyo"
 	default:
@@ -26,9 +26,10 @@ func NewDatabse() *gorm.DB {
 		&gorm.Config{DisableForeignKeyConstraintWhenMigrating: true},
 	)
 	if err != nil {
-		log.Printf("failed to connect with %s databse: %s", env, err.Error())
+		log.Fatalf("failed to connect with %s databse: %s", env, err.Error())
+	} else {
+		log.Printf("%s databse connected !! 📦", env)
 	}
-	log.Printf("%s databse connected !! 📦", env)
 	return db
 }
 
@@ -47,7 +48,7 @@ func NewRedisCilent(ctx context.Context) *redis.Client {
 			DB:       0,
 		})
 	}
-	_, err := client.Ping().Result()
+	_, err := client.Ping(ctx).Result()
 	if err != nil {
 		log.Fatalf("failed to connect to %s redis: %v", env, err)
 	}
