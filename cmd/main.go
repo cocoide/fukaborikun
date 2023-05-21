@@ -3,20 +3,27 @@ package main
 import (
 	"log"
 
+	"github.com/cocoide/fukaborikun/pkg/gateway"
+	"github.com/cocoide/fukaborikun/pkg/handler"
+	"github.com/joho/godotenv"
 	"github.com/labstack/echo/v4"
-	"gorm.io/driver/mysql"
-	"gorm.io/gorm"
 )
 
 func main() {
 	e := echo.New()
-	DSN := "kazuki:secret@tcp(db:3306)/mydb?charset=utf8mb4&parseTime=True&loc=Asia%2FTokyo"
-	_, err := gorm.Open(mysql.Open(DSN))
+	err := godotenv.Load(".env")
 	if err != nil {
-		log.Fatalf("failed to connect with databse: %s", err.Error())
+		log.Printf("failed to load .env file: %v" + err.Error())
+	} else {
+		log.Print(".env file properly loaded")
 	}
-	e.GET("/", func(c echo.Context) error {
-		return c.String(200, "Hello, World!")
-	})
+	// DSN := "kazuki:secret@tcp(db:3306)/mydb?charset=utf8mb4&parseTime=True&loc=Asia%2FTokyo"
+	// _, err := gorm.Open(mysql.Open(DSN))
+	// if err != nil {
+	// 	log.Fatalf("failed to connect with databse: %s", err.Error())
+	// }
+	lg := gateway.NewLineAPIGateway()
+	wh := handler.NewWebHookHandler(lg)
+	e.POST("/linebot-webhook", wh.HandleLineEvent)
 	e.Logger.Fatal(e.Start(":8080"))
 }
