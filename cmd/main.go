@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"log"
 
+	"github.com/cocoide/fukaborikun/pkg/database"
 	"github.com/cocoide/fukaborikun/pkg/gateway"
 	"github.com/cocoide/fukaborikun/pkg/handler"
 	"github.com/joho/godotenv"
@@ -17,11 +19,10 @@ func main() {
 	} else {
 		log.Print(".env file properly loaded")
 	}
-	// DSN := "kazuki:secret@tcp(db:3306)/mydb?charset=utf8mb4&parseTime=True&loc=Asia%2FTokyo"
-	// _, err := gorm.Open(mysql.Open(DSN))
-	// if err != nil {
-	// 	log.Fatalf("failed to connect with databse: %s", err.Error())
-	// }
+	ctx := context.Background()
+	database.NewDatabse()
+	database.NewRedisCilent(ctx)
+
 	lg := gateway.NewLineAPIGateway()
 	wh := handler.NewWebHookHandler(lg)
 	e.POST("/linebot-webhook", wh.HandleLineEvent)
