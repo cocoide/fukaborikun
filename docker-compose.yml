@@ -1,0 +1,46 @@
+version: "3.8"
+services:
+  dev:
+    container_name: fukaborikun-dev
+    build:
+      context: ./
+      dockerfile: Dockerfile.dev
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./:/app
+    depends_on:
+      - db
+  app:
+    container_name: fukaborikun-app
+    build:
+      context: ./
+      dockerfile: Dockerfile
+      target: prod
+    ports:
+      - "80:8080"
+    depends_on:
+      - db
+    command: ./main
+  db:
+    container_name: fukaborikun-db
+    build:
+      context: ./
+      dockerfile: Dockerfile.db
+    ports:
+      - 3306:3306
+    environment:
+      MYSQL_ROOT_PASSWORD: secret
+      MYSQL_DATABASE: mydb
+      MYSQL_USER: kazuki
+      MYSQL_PASSWORD: secret
+      TZ: Asia/Tokyo
+    restart: always
+    command: --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
+    volumes:
+      - type: volume
+        source: fukaborikun-mysql
+        target: /var/lib/mysql
+volumes:
+  fukaborikun-mysql:
+    name: fukaborikun-mysql
