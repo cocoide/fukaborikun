@@ -9,6 +9,7 @@ import (
 
 type OpenAIGateway interface {
 	GetAnswerFromPrompt(prompt string) (string, error)
+	AsyncGetAnswerFromPrompt(prompt string) <-chan string
 }
 
 type openAIGateway struct {
@@ -38,4 +39,15 @@ func (og *openAIGateway) GetAnswerFromPrompt(prompt string) (string, error) {
 	}
 	answer := res.Choices[0].Message.Content
 	return answer, nil
+}
+
+func (og *openAIGateway) AsyncGetAnswerFromPrompt(prompt string) <-chan string {
+	responseCh := make(chan string, 1)
+
+	go func() {
+		answer, _ := og.GetAnswerFromPrompt(prompt)
+		responseCh <- answer
+	}()
+
+	return responseCh
 }

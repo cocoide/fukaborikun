@@ -15,6 +15,7 @@ type LineAPIGateway interface {
 	ReplyWithMessage(msg *linebot.TextMessage, event *linebot.Event) error
 	PushText(msg string, event *linebot.Event) error
 	ReturnWithError(msg string, event *linebot.Event, err error)
+	SendQuickReplyButtons(text string, labels []string, event *linebot.Event) error
 }
 
 type lineAPIGateway struct {
@@ -70,4 +71,18 @@ func (gateway *lineAPIGateway) ReturnWithError(msg string, event *linebot.Event,
 		log.Printf("failed to handle error: %v", err)
 	}
 	return
+}
+
+func (gateway *lineAPIGateway) SendQuickReplyButtons(text string, labels []string, event *linebot.Event) error {
+	msg := linebot.NewTextMessage(text)
+	var quickReplyButtons []*linebot.QuickReplyButton
+	for _, label := range labels {
+		button := linebot.NewQuickReplyButton("", linebot.NewMessageAction(label, label))
+		quickReplyButtons = append(quickReplyButtons, button)
+	}
+	msg.WithQuickReplies(linebot.NewQuickReplyItems(quickReplyButtons...))
+	if err := gateway.ReplyWithMessage(msg, event); err != nil {
+		return err
+	}
+	return nil
 }

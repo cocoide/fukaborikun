@@ -16,6 +16,6 @@ func (u *SessionKey) QuestionsKey() string {
 	return u.UID + "." + "questions"
 }
 
-func (u *SessionKey) UIDKey() string {
-	return u.UID
+func (u *SessionKey) DialogStateKey() string {
+	return u.UID + "." + "state"
 }

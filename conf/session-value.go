@@ -7,4 +7,5 @@ const (
 	WaitingForTopics  = "waiting_for_topics"
 	ThinkingQuestions = "thinking_questions"
 	ThinkingSummary   = "thinking_summary"
+	BrushupSummary    = "brushup_summary"
 )

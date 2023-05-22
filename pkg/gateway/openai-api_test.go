@@ -12,7 +12,7 @@ func TestGetAnswerFromQuery(t *testing.T) {
 	conf.NewEnv()
 	ctx := context.Background()
 	og := gateway.NewOpenAIGateway(ctx)
-	res, err := og.GetAnswerFromQuery("hello")
+	res, err := og.GetAnswerFromPrompt("hello")
 	if err != nil {
 		t.Errorf("func error: %v", err)
 	}
