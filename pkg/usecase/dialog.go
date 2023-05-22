@@ -4,9 +4,8 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"time"
 
-	"github.com/cocoide/fukaborikun/conf"
+	v "github.com/cocoide/fukaborikun/conf"
 	"github.com/cocoide/fukaborikun/pkg/gateway"
 	"github.com/cocoide/fukaborikun/pkg/repository"
 	"github.com/cocoide/fukaborikun/utils"
@@ -29,12 +28,13 @@ func NewDialogUseCase(cr repository.CacheRepo, lg gateway.LineAPIGateway, og gat
 }
 
 func (u *dialogUseCase) BeginNewDialog(uid string, e *linebot.Event) error {
+	key := v.SessionKey{UID: uid}
 	ctx := context.Background()
 	// cacheのリセット
-	u.cr.Delete(ctx, uid+"."+"question")
-	u.cr.Delete(ctx, uid+"."+"answer")
-	u.lg.PushTextMessage("深掘りしたいお題を入力してね\n(例: 強みと弱み、大切な価値観、etc)", e)
-	err := u.cr.Set(ctx, uid, conf.WaitingTopics, time.Minute*30)
+	u.cr.Delete(ctx, key.QuestionsKey())
+	u.cr.Delete(ctx, key.AnswerKey())
+	u.lg.PushText("深掘りしたいお題を入力してね\n(例: 強みと弱み、大切な価値観、etc)", e)
+	err := u.cr.Set(ctx, uid, v.WaitingForTopics, v.DialogExpireTime)
 	if err != nil {
 		return err
 	}
@@ -42,67 +42,83 @@ func (u *dialogUseCase) BeginNewDialog(uid string, e *linebot.Event) error {
 }
 
 func (u *dialogUseCase) SubscribeDialogEvent(uid, text string, e *linebot.Event) error {
+	key := v.SessionKey{UID: uid}
+
 	ctx := context.Background()
-	value, _ := u.cr.Get(ctx, uid)
-	if value == "" {
-		u.lg.PushTextMessage("『深掘りを開始』と入力したら始まります。", e)
+	state, _ := u.cr.Get(ctx, key.UIDKey())
+	if state == "" {
+		u.lg.PushText("『深掘りを開始』と入力したら始まります。", e)
 		return nil
 	}
-	switch value {
-	case conf.WaitingTopics:
-		u.cr.Set(ctx, uid+"."+"topics", text, time.Hour)
-		promp := fmt.Sprintf("『%s』をテーマに相手に質問する内容を5点、文脈のつながりを意識した上で以下のような形式で箇条書きするだけして。\n-\n-\n-\n-\n-\n(ただし箇条書き以外何も話さないで)", text)
+	switch state {
+	case v.ThinkingQuestions:
+		u.lg.PushText("質問を生成中...", e)
+	case v.ThinkingSummary:
+		u.lg.PushText("回答を要約中....", e)
+	case v.WaitingForTopics:
+		u.cr.Set(ctx, key.TopicsKey(), text, v.DialogExpireTime)
+		prompt := fmt.Sprintf("『%s』をテーマに相手に質問する内容を5点、文脈のつながりを意識した上で以下のような形式で箇条書きするだけして。\n-\n-\n-\n-\n-\n(ただし箇条書き以外何も話さないで)", text)
 		questionCh := make(chan string, 1)
 		go func() {
-			answer, _ := u.og.GetAnswerFromQuery(promp)
+			answer, _ := u.og.GetAnswerFromPrompt(prompt)
 			questionCh <- answer
 		}()
-		u.lg.PushTextMessage("質問項目を考え中...", e)
+		u.cr.Set(ctx, uid, v.ThinkingQuestions, v.DialogExpireTime)
+		// 非同期処理が完了するまで、valueに『ThinkingQuestions』を設定
+		u.lg.PushText("質問項目を考え中...", e)
 		question := <-questionCh
-		u.cr.Set(ctx, uid+"."+"question", question, time.Hour)
+		u.cr.Set(ctx, key.QuestionsKey(), question, v.DialogExpireTime)
 		questions := utils.ExtractTextLines(question)
-		u.lg.PushTextMessage(questions[0], e)
-		u.cr.Set(ctx, uid, "1", time.Hour)
-	case "1":
-		u.setQuestionAndNextState(uid, 1, e, text)
-	case "2":
-		u.setQuestionAndNextState(uid, 2, e, text)
-	case "3":
-		u.setQuestionAndNextState(uid, 3, e, text)
-	case "4":
-		u.setQuestionAndNextState(uid, 4, e, text)
+		u.lg.PushText(questions[0], e)
+		u.cr.Set(ctx, key.UIDKey(), "1", v.DialogExpireTime)
+	case "1", "2", "3", "4":
+		index, err := strconv.Atoi(state)
+		if err != nil {
+			return err
+		}
+		if err := u.manageSingleDialog(uid, index, e, text); err != nil {
+			return err
+		}
 	case "5":
-		answer, _ := u.cr.Get(ctx, uid+"."+"answer")
-		question, _ := u.cr.Get(ctx, uid+"."+"question")
+		answer, _ := u.cr.Get(ctx, key.AnswerKey())
+		question, _ := u.cr.Get(ctx, key.QuestionsKey())
 		questions := utils.ExtractTextLines(question)
-		u.cr.Set(ctx, uid+"."+"answer", answer+"\n"+"[質問: "+questions[4]+"]"+" 回答:"+text, time.Hour)
-		u.lg.PushTextMessage("ご回答ありがとうございました。\n最後に深掘りの結果をまとめます。", e)
-
+		u.cr.Set(ctx, key.AnswerKey(), answer+"\n"+"[質問: "+questions[4]+"]"+" 回答:"+text, v.DialogExpireTime)
+		u.lg.PushText("ご回答ありがとうございました。\n最後に深掘りの結果をまとめます。", e)
+		u.cr.Set(ctx, uid, v.ThinkingSummary, v.DialogExpireTime)
 		summaryCh := make(chan string, 1)
-		topics, _ := u.cr.Get(ctx, uid+"."+"topics")
+		topics, _ := u.cr.Get(ctx, key.TopicsKey())
 		go func() {
-			answer, _ := u.cr.Get(ctx, uid+"."+"answer")
-			promp := fmt.Sprintf("【%s】 以下全ての回答を前後の文脈を自然な流れで繋げて、かつ誰かに伝えるような口調で分かりやすく%s", topics, answer)
-			response, _ := u.og.GetAnswerFromQuery(promp)
+			answer, _ := u.cr.Get(ctx, key.AnswerKey())
+			prompt := fmt.Sprintf("[お題: %s][ 対話%s]以上、すべての回答を前後の文脈を自然な流れで繋げて、分かりやすく言い換えて", topics, answer)
+			response, _ := u.og.GetAnswerFromPrompt(prompt)
 			summaryCh <- response
 		}()
-		u.lg.PushTextMessage("回答を要約中...", e)
+		u.lg.PushText("回答を要約中...", e)
+
 		summary := <-summaryCh
-		u.lg.PushTextMessage(summary, e)
-		// dialogを保存するのかどうかを聞く
-		u.cr.Delete(ctx, uid+"."+"question")
+		u.lg.PushText("【"+topics+"】\n"+summary, e)
+		// dialogを保存するのかどうかを聞く処理を入れる
+		// u.cr.Delete(ctx, key.QuestionsKey())
 		u.cr.Delete(ctx, uid)
 	}
 	return nil
 }
 
-func (u *dialogUseCase) setQuestionAndNextState(uid string, index int, e *linebot.Event, text string) {
+func (u *dialogUseCase) manageSingleDialog(uid string, index int, e *linebot.Event, text string) error {
+	key := v.SessionKey{UID: uid}
 	ctx := context.Background()
-	question, _ := u.cr.Get(ctx, uid+"."+"question")
+	question, err := u.cr.Get(ctx, key.AnswerKey())
+	if err != nil {
+		return err
+	}
 	questions := utils.ExtractTextLines(question)
-
-	answer, _ := u.cr.Get(ctx, uid+"."+"answer")
-	u.cr.Set(ctx, uid+"."+"answer", answer+"\n"+"[質問: "+questions[index-1]+"]"+" 回答: "+text, time.Hour)
-	u.lg.PushTextMessage(questions[index], e)
-	u.cr.Set(ctx, uid, strconv.Itoa(index+1), time.Hour)
+	answer, err := u.cr.Get(ctx, key.AnswerKey())
+	if err != nil {
+		return err
+	}
+	u.cr.Set(ctx, key.AnswerKey(), answer+"\n"+"[質問: "+questions[index-1]+"]"+"[ 回答: "+text+"]", v.DialogExpireTime)
+	u.lg.PushText(questions[index], e)
+	u.cr.Set(ctx, key.UIDKey(), strconv.Itoa(index+1), v.DialogExpireTime)
+	return nil
 }

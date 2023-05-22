@@ -8,7 +8,7 @@ import (
 )
 
 type OpenAIGateway interface {
-	GetAnswerFromQuery(query string) (string, error)
+	GetAnswerFromPrompt(prompt string) (string, error)
 }
 
 type openAIGateway struct {
@@ -22,13 +22,13 @@ func NewOpenAIGateway(ctx context.Context) OpenAIGateway {
 	return &openAIGateway{client: client, ctx: ctx}
 }
 
-func (og *openAIGateway) GetAnswerFromQuery(query string) (string, error) {
+func (og *openAIGateway) GetAnswerFromPrompt(prompt string) (string, error) {
 	req := openai.ChatCompletionRequest{
 		Model: openai.GPT3Dot5Turbo,
 		Messages: []openai.ChatCompletionMessage{
 			{
 				Role:    openai.ChatMessageRoleUser,
-				Content: query,
+				Content: prompt,
 			},
 		},
 	}

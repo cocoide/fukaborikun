@@ -10,10 +10,10 @@ import (
 )
 
 type LineAPIGateway interface {
-	SubscribeToEvents(req *http.Request) ([]*linebot.Event, error)
+	SubscribeLineBotEvents(req *http.Request) ([]*linebot.Event, error)
 	ReplyWithText(msg string, event *linebot.Event) error
 	ReplyWithMessage(msg *linebot.TextMessage, event *linebot.Event) error
-	PushTextMessage(msg string, event *linebot.Event) error
+	PushText(msg string, event *linebot.Event) error
 	ReturnWithError(msg string, event *linebot.Event, err error)
 }
 
@@ -31,7 +31,7 @@ func NewLineAPIGateway() LineAPIGateway {
 	return &lineAPIGateway{bot: bot}
 }
 
-func (gateway *lineAPIGateway) SubscribeToEvents(req *http.Request) ([]*linebot.Event, error) {
+func (gateway *lineAPIGateway) SubscribeLineBotEvents(req *http.Request) ([]*linebot.Event, error) {
 	events, err := gateway.bot.ParseRequest(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse LINEBOT request: %v", err)
@@ -53,7 +53,7 @@ func (gateway *lineAPIGateway) ReplyWithMessage(msg *linebot.TextMessage, event 
 	return nil
 }
 
-func (gateway *lineAPIGateway) PushTextMessage(msg string, event *linebot.Event) error {
+func (gateway *lineAPIGateway) PushText(msg string, event *linebot.Event) error {
 	if _, err := gateway.bot.PushMessage(event.Source.UserID, linebot.NewTextMessage(msg)).Do(); err != nil {
 		return fmt.Errorf("failed to push text message(%s): %v", msg, err)
 	}

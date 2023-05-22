@@ -3,7 +3,6 @@ package handler
 import (
 	"context"
 	"log"
-	"time"
 
 	"github.com/cocoide/fukaborikun/pkg/gateway"
 	"github.com/cocoide/fukaborikun/pkg/usecase"
@@ -28,10 +27,9 @@ func NewWebHookHandler(lg gateway.LineAPIGateway, du usecase.DialogUseCase) WebH
 var limiter = utils.NewRateLimiter(5, 10)
 
 func (wh *webHookHandler) HandleLineEvent(c echo.Context) error {
-	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
-	defer cancel()
+	ctx := context.Background()
 	if err := limiter.Limit(ctx, func() error {
-		events, _ := wh.lg.SubscribeToEvents(c.Request())
+		events, _ := wh.lg.SubscribeLineBotEvents(c.Request())
 		for _, e := range events {
 			if e.Type != linebot.EventTypeMessage {
 				continue
