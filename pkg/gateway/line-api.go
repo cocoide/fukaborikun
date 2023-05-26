@@ -15,7 +15,7 @@ type LineAPIGateway interface {
 	ReplyWithMessage(msg *linebot.TextMessage, event *linebot.Event) error
 	PushText(msg string, event *linebot.Event) error
 	ReturnWithError(msg string, event *linebot.Event, err error)
-	SendQuickReplyButtons(text string, labels []string, event *linebot.Event) error
+	ReplyQuickReplyButtons(text string, labels []string, event *linebot.Event) error
 }
 
 type lineAPIGateway struct {
@@ -73,7 +73,7 @@ func (gateway *lineAPIGateway) ReturnWithError(msg string, event *linebot.Event,
 	return
 }
 
-func (gateway *lineAPIGateway) SendQuickReplyButtons(text string, labels []string, event *linebot.Event) error {
+func (gateway *lineAPIGateway) ReplyQuickReplyButtons(text string, labels []string, event *linebot.Event) error {
 	msg := linebot.NewTextMessage(text)
 	var quickReplyButtons []*linebot.QuickReplyButton
 	for _, label := range labels {

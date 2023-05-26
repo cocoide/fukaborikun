@@ -30,10 +30,13 @@ func NewDialogUseCase(cr repository.CacheRepo, lg gateway.LineAPIGateway, og gat
 func (u *dialogUseCase) BeginNewDialog(uid string, e *linebot.Event) error {
 	key := v.SessionKey{UID: uid}
 	ctx := context.Background()
-	u.cr.Delete(ctx, key.DialogStateKey())
-	u.lg.PushText("深掘りしたいお題を入力してね\n(例: 強みと弱み、大切な価値観、etc)", e)
-	err := u.cr.Set(ctx, key.DialogStateKey(), v.WaitingForTopics, v.DialogExpireTime)
-	if err != nil {
+	if err := u.deleteAllDialogCaches(ctx, key); err != nil {
+		return err
+	}
+	if err := u.lg.PushText("深掘りしたいお題を入力してね\n(例: 強みと弱み、大切な価値観、etc)", e); err != nil {
+		return err
+	}
+	if err := u.cr.Set(ctx, key.DialogStateKey(), v.WaitingForTopics, v.DialogExpireTime); err != nil {
 		return err
 	}
 	return nil
@@ -95,7 +98,7 @@ func (u *dialogUseCase) SubscribeDialogEvent(uid, text string, e *linebot.Event)
 		// AnswerKeyに再生成用のSummaryを保存
 		u.cr.Set(ctx, key.AnswerKey(), summary, v.DialogExpireTime)
 
-		u.lg.SendQuickReplyButtons("作成した要約を再生成する？", []string{"お願いします", "大丈夫です"}, e)
+		u.lg.ReplyQuickReplyButtons("作成した要約を再生成する？", []string{"お願いします", "大丈夫です"}, e)
 		u.cr.Set(ctx, key.DialogStateKey(), "6", v.DialogExpireTime)
 	case "6":
 		if text == "大丈夫です" {
@@ -112,10 +115,7 @@ func (u *dialogUseCase) SubscribeDialogEvent(uid, text string, e *linebot.Event)
 			u.lg.PushText("【"+topics+"】\n"+brushup, e)
 			u.lg.PushText("以上で終了いたします。\nもう一度遊びたいときは、再度『深掘りを開始』とお送り下さい", e)
 		}
-		u.cr.Delete(ctx, key.QuestionsKey())
-		u.cr.Delete(ctx, key.DialogStateKey())
-		u.cr.Delete(ctx, key.AnswerKey())
-		u.cr.Delete(ctx, key.TopicsKey())
+		u.deleteAllDialogCaches(ctx, key)
 	}
 	return nil
 }
@@ -136,7 +136,22 @@ func (u *dialogUseCase) manageSingleDialog(uid string, index int, e *linebot.Eve
 	u.cr.Set(ctx, key.AnswerKey(), cacheDialogValue, v.DialogExpireTime)
 	u.lg.PushText(questions[index], e)
 
-	nextIndex := strconv.Itoa(index + 1)
-	u.cr.Set(ctx, key.DialogStateKey(), nextIndex, v.DialogExpireTime)
+	nextDialogIndex := strconv.Itoa(index + 1)
+	u.cr.Set(ctx, key.DialogStateKey(), nextDialogIndex, v.DialogExpireTime)
+	return nil
+}
+
+func (u *dialogUseCase) deleteAllDialogCaches(ctx context.Context, key v.SessionKey) error {
+	keys := []string{
+		key.QuestionsKey(),
+		key.DialogStateKey(),
+		key.AnswerKey(),
+		key.TopicsKey(),
+	}
+	for _, k := range keys {
+		if err := u.cr.Delete(ctx, k); err != nil {
+			return err
+		}
+	}
 	return nil
 }
